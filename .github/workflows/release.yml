@@ -1,0 +1,173 @@
+﻿name: Build and publish Jellyfin plugin
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          PLUGIN_VERSION="${GITHUB_REF_NAME#v}"
+          ASSET_NAME="Jellyfin.Plugin.CatchupCatalog_${PLUGIN_VERSION}.zip"
+          SOURCE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ASSET_NAME}"
+
+          echo "PLUGIN_VERSION=${PLUGIN_VERSION}" >> "${GITHUB_ENV}"
+          echo "ASSET_NAME=${ASSET_NAME}" >> "${GITHUB_ENV}"
+          echo "SOURCE_URL=${SOURCE_URL}" >> "${GITHUB_ENV}"
+
+      - name: Restore
+        run: |
+          dotnet restore \
+            Jellyfin.Plugin.CatchupCatalog/Jellyfin.Plugin.CatchupCatalog.csproj
+
+      - name: Publish
+        run: |
+          dotnet publish \
+            Jellyfin.Plugin.CatchupCatalog/Jellyfin.Plugin.CatchupCatalog.csproj \
+            --configuration Release \
+            --output build/publish \
+            --no-restore \
+            /p:Version="${PLUGIN_VERSION}" \
+            /p:AssemblyVersion="${PLUGIN_VERSION}" \
+            /p:FileVersion="${PLUGIN_VERSION}"
+
+      - name: Package plugin
+        shell: bash
+        run: |
+          mkdir -p build/package
+
+          cp \
+            build/publish/Jellyfin.Plugin.CatchupCatalog.dll \
+            build/package/
+
+          (
+            cd build/package
+            zip -9 "../${ASSET_NAME}" ./*
+          )
+
+          CHECKSUM="$(md5sum "build/${ASSET_NAME}" | awk '{print $1}')"
+          echo "CHECKSUM=${CHECKSUM}" >> "${GITHUB_ENV}"
+
+          echo "Asset: ${ASSET_NAME}"
+          echo "MD5: ${CHECKSUM}"
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload \
+              "${GITHUB_REF_NAME}" \
+              "build/${ASSET_NAME}" \
+              --clobber
+          else
+            gh release create \
+              "${GITHUB_REF_NAME}" \
+              "build/${ASSET_NAME}" \
+              --title "Catch-up Catalog ${PLUGIN_VERSION}" \
+              --notes "Catch-up Catalog for Jellyfin 10.11.x."
+          fi
+
+      - name: Switch to main branch
+        shell: bash
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+
+      - name: Generate Jellyfin repository manifest
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          manifest_path = Path("manifest.json")
+
+          try:
+              manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+              if not isinstance(manifest, list):
+                  manifest = []
+          except (FileNotFoundError, json.JSONDecodeError):
+              manifest = []
+
+          guid = "6fb961ad-51d1-42c2-a1c3-49e5a9458c68"
+
+          plugin = next(
+              (item for item in manifest if item.get("guid") == guid),
+              None,
+          )
+
+          if plugin is None:
+              plugin = {
+                  "guid": guid,
+                  "name": "Catch-up Catalog",
+                  "description": "Organizes Dispatcharr catch-up EPG into Movies, Series and Programs with optional TMDb metadata.",
+                  "overview": "Catch-up movies, series and programs from Dispatcharr.",
+                  "owner": "OmriiB",
+                  "category": "Channels",
+                  "versions": [],
+              }
+              manifest.append(plugin)
+
+          version = {
+              "version": os.environ["PLUGIN_VERSION"],
+              "changelog": "Initial repository release for Jellyfin 10.11.x.",
+              "targetAbi": "10.11.0.0",
+              "sourceUrl": os.environ["SOURCE_URL"],
+              "checksum": os.environ["CHECKSUM"],
+              "timestamp": datetime.now(timezone.utc)
+                  .replace(microsecond=0)
+                  .isoformat()
+                  .replace("+00:00", "Z"),
+          }
+
+          plugin["versions"] = [
+              item
+              for item in plugin.get("versions", [])
+              if item.get("version") != version["version"]
+          ]
+          plugin["versions"].insert(0, version)
+
+          manifest_path.write_text(
+              json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Publish manifest
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add manifest.json
+
+          if git diff --cached --quiet; then
+            echo "Manifest is already current."
+            exit 0
+          fi
+
+          git commit -m "chore: publish Catch-up Catalog ${PLUGIN_VERSION}"
+          git push origin main

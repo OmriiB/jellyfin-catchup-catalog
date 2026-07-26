@@ -1,0 +1,86 @@
+<div id="CatchupCatalogPage"
+     data-role="page"
+     class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-checkbox"
+     data-controller="__plugin/CatchupCatalog.js">
+  <div data-role="content">
+    <div class="content-primary">
+      <h1>Catch-up Catalog</h1>
+      <p>Creates Movies, Series and Programs catalogs from Dispatcharr catch-up EPG.</p>
+
+      <form id="CatchupCatalogForm">
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label class="emby-checkbox-label">
+            <input id="Enabled" type="checkbox" is="emby-checkbox" />
+            <span>Enable Catch-up Catalog</span>
+          </label>
+        </div>
+
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="BaseUrl">Dispatcharr Base URL</label>
+          <input id="BaseUrl" type="url" is="emby-input" />
+          <div class="fieldDescription">Example: http://192.168.1.100:9191</div>
+        </div>
+
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="Username">Dispatcharr Username</label>
+          <input id="Username" type="text" is="emby-input" />
+        </div>
+
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="Password">Dispatcharr XC Password</label>
+          <input id="Password" type="password" is="emby-input" />
+        </div>
+
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="ArchiveDays">Archive Days</label>
+          <input id="ArchiveDays" type="number" min="1" max="30" is="emby-input" />
+        </div>
+
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="CacheMinutes">Refresh Cache Minutes</label>
+          <input id="CacheMinutes" type="number" min="5" max="720" is="emby-input" />
+        </div>
+
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="MetadataLanguage">Metadata Language</label>
+          <input id="MetadataLanguage" type="text" is="emby-input" />
+          <div class="fieldDescription">Recommended: he-IL</div>
+        </div>
+
+        <div class="inputContainer">
+          <label class="inputLabel inputLabelUnfocused" for="TmdbBearerToken">TMDb API Read Access Token</label>
+          <input id="TmdbBearerToken" type="password" is="emby-input" />
+          <div class="fieldDescription">Optional, but required for posters, backdrops and richer movie/series metadata.</div>
+        </div>
+
+        <div class="checkboxContainer">
+          <label class="emby-checkbox-label">
+            <input id="ShowMovies" type="checkbox" is="emby-checkbox" />
+            <span>Show Catch-up Movies</span>
+          </label>
+        </div>
+
+        <div class="checkboxContainer">
+          <label class="emby-checkbox-label">
+            <input id="ShowSeries" type="checkbox" is="emby-checkbox" />
+            <span>Show Catch-up Series</span>
+          </label>
+        </div>
+
+        <div class="checkboxContainer">
+          <label class="emby-checkbox-label">
+            <input id="ShowPrograms" type="checkbox" is="emby-checkbox" />
+            <span>Show Unmatched Programs</span>
+          </label>
+        </div>
+
+        <div>
+          <button is="emby-button" type="submit" class="raised button-submit block">
+            <span>Save</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

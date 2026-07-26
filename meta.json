@@ -1,0 +1,16 @@
+{
+  "category": "Channels",
+  "changelog": "Initial beta release.",
+  "description": "Organizes Dispatcharr catch-up EPG into Movies, Series and Programs with optional TMDb metadata.",
+  "guid": "6fb961ad-51d1-42c2-a1c3-49e5a9458c68",
+  "name": "Catch-up Catalog",
+  "overview": "Catch-up movies, series and programs from Dispatcharr.",
+  "owner": "OpenAI",
+  "targetAbi": "10.11.0.0",
+  "timestamp": "2026-07-26T00:00:00.0000000Z",
+  "version": "0.1.0.0",
+  "status": "Active",
+  "autoUpdate": false,
+  "imagePath": "",
+  "assemblies": []
+}
