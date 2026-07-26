@@ -26,7 +26,7 @@ public sealed class DispatcharrClient : IDisposable
             new ProductInfoHeaderValue("Jellyfin-Catchup-Catalog", "0.1.0"));
     }
 
-    public async Task<List<LiveStreamDto>> GetLiveStreamsAsync(
+    internal async Task<List<LiveStreamDto>> GetLiveStreamsAsync(
         PluginConfiguration configuration,
         CancellationToken cancellationToken)
     {
@@ -40,7 +40,7 @@ public sealed class DispatcharrClient : IDisposable
             cancellationToken).ConfigureAwait(false) ?? [];
     }
 
-    public async Task<EpgListingsDto> GetEpgAsync(
+    internal async Task<EpgListingsDto> GetEpgAsync(
         PluginConfiguration configuration,
         int streamId,
         CancellationToken cancellationToken)
@@ -57,7 +57,7 @@ public sealed class DispatcharrClient : IDisposable
             cancellationToken).ConfigureAwait(false) ?? new EpgListingsDto();
     }
 
-    public string BuildPlaybackUrl(PluginConfiguration configuration, CatalogEntry entry)
+    internal string BuildPlaybackUrl(PluginConfiguration configuration, CatalogEntry entry)
     {
         string baseUrl = configuration.BaseUrl.TrimEnd('/');
         string start = entry.StartLocal.ToString(

@@ -21,7 +21,7 @@ public sealed class TmdbClient : IDisposable
         _logger = logger;
     }
 
-    public async Task<TmdbMatch?> SearchAsync(
+    internal async Task<TmdbMatch?> SearchAsync(
         PluginConfiguration configuration,
         string title,
         bool searchTv,

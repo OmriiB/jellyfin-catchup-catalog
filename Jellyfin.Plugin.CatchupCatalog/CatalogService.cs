@@ -32,7 +32,7 @@ public sealed partial class CatalogService
 
     public static void InvalidateGlobal() => Interlocked.Increment(ref _globalVersion);
 
-    public async Task<CatalogSnapshot> GetAsync(CancellationToken cancellationToken)
+    internal async Task<CatalogSnapshot> GetAsync(CancellationToken cancellationToken)
     {
         PluginConfiguration configuration = Plugin.Instance.Configuration;
         int configurationHash = HashCode.Combine(
