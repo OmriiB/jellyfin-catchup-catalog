@@ -1,2 +1,20 @@
-﻿[
+[
+  {
+    "guid": "6fb961ad-51d1-42c2-a1c3-49e5a9458c68",
+    "name": "Catch-up Catalog",
+    "description": "Organizes Dispatcharr catch-up EPG into Movies, Series and Programs with optional TMDb metadata.",
+    "overview": "Catch-up movies, series and programs from Dispatcharr.",
+    "owner": "OmriiB",
+    "category": "Channels",
+    "versions": [
+      {
+        "version": "0.1.0.1",
+        "changelog": "Initial repository release for Jellyfin 10.11.x.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/OmriiB/jellyfin-catchup-catalog/releases/download/v0.1.0.1/Jellyfin.Plugin.CatchupCatalog_0.1.0.1.zip",
+        "checksum": "ec7ddb66885639163fa5de6dc1644a4c",
+        "timestamp": "2026-07-26T09:43:12Z"
+      }
+    ]
+  }
 ]
