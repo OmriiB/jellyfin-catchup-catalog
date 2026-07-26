@@ -15,6 +15,7 @@ public sealed partial class CatalogService
     private readonly TmdbClient _tmdb;
     private readonly ILogger<CatalogService> _logger;
     private readonly SemaphoreSlim _refreshGate = new(1, 1);
+    private readonly SemaphoreSlim _metadataRefreshGate = new(1, 1);
     private CatalogSnapshot? _snapshot;
     private int _configurationHash;
 
@@ -62,10 +63,12 @@ public sealed partial class CatalogService
                 return _snapshot;
             }
 
-            _snapshot = await BuildSnapshotAsync(configuration, cancellationToken).ConfigureAwait(false);
+            CatalogSnapshot snapshot = await BuildSnapshotAsync(configuration, cancellationToken).ConfigureAwait(false);
+            _snapshot = snapshot;
             _configurationHash = configurationHash;
             Interlocked.Increment(ref _globalVersion);
-            return _snapshot;
+            StartMetadataEnrichment(configuration, snapshot);
+            return snapshot;
         }
         finally
         {
@@ -136,7 +139,6 @@ public sealed partial class CatalogService
 
         ApplyRepeatedTitleClassification(list);
         ApplyEpisodeNumbers(list);
-        await ApplyMetadataAsync(configuration, list, cancellationToken).ConfigureAwait(false);
 
         return new CatalogSnapshot
         {
@@ -208,70 +210,125 @@ public sealed partial class CatalogService
         }
     }
 
-    private async Task ApplyMetadataAsync(
+    private void StartMetadataEnrichment(
+        PluginConfiguration configuration,
+        CatalogSnapshot snapshot)
+    {
+        if (snapshot.Entries.Count == 0
+            || string.IsNullOrWhiteSpace(configuration.TmdbBearerToken))
+        {
+            return;
+        }
+
+        PluginConfiguration metadataConfiguration = new()
+        {
+            MetadataLanguage = configuration.MetadataLanguage,
+            TmdbBearerToken = configuration.TmdbBearerToken
+        };
+
+        _ = Task.Run(async () =>
+        {
+            if (!await _metadataRefreshGate.WaitAsync(0).ConfigureAwait(false))
+            {
+                _logger.LogDebug("TMDb metadata enrichment is already running");
+                return;
+            }
+
+            try
+            {
+                _logger.LogInformation(
+                    "Starting background TMDb metadata enrichment for {EntryCount} catalog entries",
+                    snapshot.Entries.Count);
+
+                int enrichedGroups = await ApplyMetadataAsync(
+                    metadataConfiguration,
+                    snapshot.Entries,
+                    CancellationToken.None).ConfigureAwait(false);
+
+                if (ReferenceEquals(_snapshot, snapshot))
+                {
+                    Interlocked.Increment(ref _globalVersion);
+                }
+
+                _logger.LogInformation(
+                    "Completed background TMDb metadata enrichment for {GroupCount} titles",
+                    enrichedGroups);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Background TMDb metadata enrichment failed");
+            }
+            finally
+            {
+                _metadataRefreshGate.Release();
+            }
+        });
+    }
+
+    private async Task<int> ApplyMetadataAsync(
         PluginConfiguration configuration,
         List<CatalogEntry> entries,
         CancellationToken cancellationToken)
     {
-        Dictionary<string, List<CatalogEntry>> groups = entries
+        List<KeyValuePair<string, List<CatalogEntry>>> groups = entries
             .Where(entry => entry.Kind is CatalogKind.Movie or CatalogKind.SeriesEpisode)
             .GroupBy(
                 entry => entry.Kind == CatalogKind.Movie ? entry.Title : entry.SeriesTitle,
                 StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        using SemaphoreSlim semaphore = new(5, 5);
-        List<Task> tasks = [];
-        foreach ((string title, List<CatalogEntry> matchingEntries) in groups)
+        int enrichedGroups = 0;
+        ParallelOptions options = new()
         {
-            tasks.Add(Task.Run(async () =>
+            MaxDegreeOfParallelism = 4,
+            CancellationToken = cancellationToken
+        };
+
+        await Parallel.ForEachAsync(groups, options, async (group, token) =>
+        {
+            string title = group.Key;
+            List<CatalogEntry> matchingEntries = group.Value;
+            bool searchTv = matchingEntries[0].Kind == CatalogKind.SeriesEpisode;
+
+            TmdbMatch? match = await _tmdb.SearchAsync(
+                configuration,
+                title,
+                searchTv,
+                token).ConfigureAwait(false);
+
+            if (match is null)
             {
-                await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
+                return;
+            }
+
+            foreach (CatalogEntry entry in matchingEntries)
+            {
+                if (!string.IsNullOrWhiteSpace(match.PosterUrl))
                 {
-                    bool searchTv = matchingEntries[0].Kind == CatalogKind.SeriesEpisode;
-                    TmdbMatch? match = await _tmdb.SearchAsync(
-                        configuration,
-                        title,
-                        searchTv,
-                        cancellationToken).ConfigureAwait(false);
-
-                    if (match is null)
-                    {
-                        return;
-                    }
-
-                    foreach (CatalogEntry entry in matchingEntries)
-                    {
-                        if (!string.IsNullOrWhiteSpace(match.PosterUrl))
-                        {
-                            entry.ImageUrl = match.PosterUrl;
-                        }
-
-                        entry.BackdropUrl = match.BackdropUrl;
-                        entry.ProductionYear = match.Year;
-                        entry.Rating = match.Rating;
-                        if (string.IsNullOrWhiteSpace(entry.Overview))
-                        {
-                            entry.Overview = match.Overview;
-                        }
-
-                        if (entry.Kind == CatalogKind.Movie && !string.IsNullOrWhiteSpace(match.Title))
-                        {
-                            entry.Title = match.Title;
-                        }
-                    }
+                    entry.ImageUrl = match.PosterUrl;
                 }
-                finally
+
+                entry.BackdropUrl = match.BackdropUrl;
+                entry.ProductionYear = match.Year;
+                entry.Rating = match.Rating;
+
+                if (string.IsNullOrWhiteSpace(entry.Overview))
                 {
-                    semaphore.Release();
+                    entry.Overview = match.Overview;
                 }
-            }, cancellationToken));
-        }
 
-        await Task.WhenAll(tasks).ConfigureAwait(false);
+                if (entry.Kind == CatalogKind.Movie && !string.IsNullOrWhiteSpace(match.Title))
+                {
+                    entry.Title = match.Title;
+                }
+            }
+
+            Interlocked.Increment(ref enrichedGroups);
+        }).ConfigureAwait(false);
+
+        return enrichedGroups;
     }
-
     private static void ApplyRepeatedTitleClassification(List<CatalogEntry> entries)
     {
         foreach (IGrouping<string, CatalogEntry> group in entries

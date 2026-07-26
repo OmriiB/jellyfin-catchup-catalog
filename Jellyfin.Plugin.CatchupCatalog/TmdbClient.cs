@@ -9,12 +9,12 @@ public sealed class TmdbClient : IDisposable
 {
     private readonly HttpClient _httpClient = new()
     {
-        Timeout = TimeSpan.FromSeconds(25)
+        Timeout = TimeSpan.FromSeconds(12)
     };
 
     private readonly ILogger<TmdbClient> _logger;
     private readonly Dictionary<string, TmdbMatch?> _cache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _gate = new(4, 4);
 
     public TmdbClient(ILogger<TmdbClient> logger)
     {
